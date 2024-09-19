@@ -193,22 +193,22 @@ impl<T: ?Sized> NonNull<T> {
     /// // NEVER DO THAT!!! This is undefined behavior. ⚠️
     /// let ptr = unsafe { NonNull::<u32>::new_unchecked(std::ptr::null_mut()) };
     /// ```
-    #[stable(feature = "nonnull", since = "1.25.0")]
-    #[rustc_const_stable(feature = "const_nonnull_new_unchecked", since = "1.25.0")]
-    #[inline]
-    #[requires(!ptr.is_null())]
-    #[ensures(|result| result.as_ptr() == ptr)]
-    pub const unsafe fn new_unchecked(ptr: *mut T) -> Self {
-        // SAFETY: the caller must guarantee that `ptr` is non-null.
-        unsafe {
-            assert_unsafe_precondition!(
-                check_language_ub,
-                "NonNull::new_unchecked requires that the pointer is non-null",
-                (ptr: *mut () = ptr as *mut ()) => !ptr.is_null()
-            );
-            NonNull { pointer: ptr as _ }
+        #[stable(feature = "nonnull", since = "1.25.0")]
+        #[rustc_const_stable(feature = "const_nonnull_new_unchecked", since = "1.25.0")]
+        #[inline]
+        #[requires(!ptr.is_null())]
+        #[ensures(|result| result.as_ptr() == ptr)]
+        pub const unsafe fn new_unchecked(ptr: *mut T) -> Self {
+            // SAFETY: the caller must guarantee that `ptr` is non-null.
+            unsafe {
+                assert_unsafe_precondition!(
+                    check_language_ub,
+                    "NonNull::new_unchecked requires that the pointer is non-null",
+                    (ptr: *mut () = ptr as *mut ()) => !ptr.is_null()
+                );
+                NonNull { pointer: ptr as _ }
+            }
         }
-    }
 
     /// Creates a new `NonNull` if `ptr` is non-null.
     ///
@@ -576,6 +576,8 @@ impl<T: ?Sized> NonNull<T> {
     #[rustc_allow_const_fn_unstable(set_ptr_value)]
     #[stable(feature = "non_null_convenience", since = "1.80.0")]
     #[rustc_const_stable(feature = "non_null_convenience", since = "1.80.0")]
+    #[requires(count as isize >= 0 && !self.as_ptr().is_null())] 
+    #[ensures(|result: &NonNull<T>| (result.as_ptr() as *const () as usize) == ((self.as_ptr() as *const () as usize) + count))]
     pub const unsafe fn byte_add(self, count: usize) -> Self {
         // SAFETY: the caller must uphold the safety contract for `add` and `byte_add` has the same
         // safety contract.
@@ -1788,6 +1790,21 @@ mod verify {
         let xptr = &mut x;
         unsafe {
             let _ = NonNull::new_unchecked(xptr as *mut i32);
+        }
+    }
+
+    #[kani::proof_for_contract(NonNull::byte_add)]
+    pub fn non_null_byte_add_proof() {
+        let size: usize = kani::any(); 
+        kani::assume(size < (isize::MAX as usize / size_of::<i32>()));
+        let arr = vec![0; size];
+        let raw_ptr: *mut i32 = arr.as_ptr() as *mut i32;
+        kani::assume(!raw_ptr.is_null());
+        let ptr = unsafe { NonNull::new(raw_ptr).unwrap() };
+        let count: usize = kani::any(); 
+        kani::assume(count <= size);
+        unsafe {
+            let result = ptr.byte_add(count);
         }
     }
 }
