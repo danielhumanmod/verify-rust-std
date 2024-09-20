@@ -1,3 +1,4 @@
+use super::*;
 use crate::cmp::Ordering;
 use crate::marker::Unsize;
 use crate::mem::{MaybeUninit, SizedTypeProperties};
@@ -1779,7 +1780,8 @@ impl<T: ?Sized> From<&T> for NonNull<T> {
     }
 }
 
-//#[unstable(feature="kani", issue="none")]
+#[cfg(kani)]
+#[unstable(feature="kani", issue="none")]
 mod verify {
     use super::*;
 
@@ -1797,8 +1799,12 @@ mod verify {
     pub fn non_null_byte_add_proof() {
         let size: usize = kani::any(); 
         kani::assume(size < (isize::MAX as usize / size_of::<i32>()));
-        let arr = vec![0; size];
-        let raw_ptr: *mut i32 = arr.as_ptr() as *mut i32;
+        let mut v = Vec::new();
+        //let arr = vec![0; size];
+        for _ in 0..size {
+            v.push(kani::any()); // Pushing non-deterministic values into the vector
+        }
+        let raw_ptr: *mut i32 = v.as_ptr() as *mut i32;
         kani::assume(!raw_ptr.is_null());
         let ptr = unsafe { NonNull::new(raw_ptr).unwrap() };
         let count: usize = kani::any(); 
