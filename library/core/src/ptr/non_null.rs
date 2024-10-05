@@ -577,6 +577,7 @@ impl<T: ?Sized> NonNull<T> {
     #[rustc_allow_const_fn_unstable(set_ptr_value)]
     #[stable(feature = "non_null_convenience", since = "1.80.0")]
     #[rustc_const_stable(feature = "non_null_convenience", since = "1.80.0")]
+    #[requires(!self.as_ptr().is_null())]
     #[ensures(
         |result: &NonNull<T>|
         (result.as_ptr() as *const () as usize) == ((self.as_ptr() as *const () as usize) + count)
@@ -1799,15 +1800,18 @@ mod verify {
 
     #[kani::proof_for_contract(NonNull::byte_add)]
     pub fn non_null_byte_add_proof() {
-        let arr: [i32; 8] = kani::any();
+        const ARR_SIZE: usize = 100000;
+        let arr: [i32; ARR_SIZE] = kani::any();
+        let offset = kani::any_where(|x| *x <= ARR_SIZE);
         let raw_ptr: *mut i32 = arr.as_ptr() as *mut i32;
-        let ptr = unsafe { NonNull::new(raw_ptr).unwrap() };
+        let ptr = unsafe { NonNull::new(raw_ptr.add(offset)).unwrap() };
         let count: usize = kani::any();
-        kani::assume(!ptr.as_ptr().is_null());
-        kani::assume(count >= 0 && count <= (isize::MAX as usize) / mem::size_of::<i32>());
-        unsafe {
-            kani::assume(count <= mem::size_of_val(&*ptr.as_ptr()) / mem::size_of::<i32>());
-        }
+
+        kani::assume(count < usize::MAX);
+        kani::assume(count.checked_mul(mem::size_of::<i32>()).is_some());
+        kani::assume(count * mem::size_of::<i32>() <= (isize::MAX as usize));
+        kani::assume(count < ARR_SIZE - offset);
+
         unsafe {
             let result = ptr.byte_add(count);
         }
